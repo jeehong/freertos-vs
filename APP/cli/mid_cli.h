@@ -47,6 +47,10 @@
 /** @breif 定义每个输入命令的字符串最大参数个数为7个，包含命令本身*/
 #define	cmdMAX_VARS_SIZE		10
 
+/* Dimensions the buffer into which input characters are placed. */
+#define cmdMAX_INPUT_SIZE		256
+#define	cmdMAX_OUTPUT_SIZE		4096
+
 /** @breif 命令传入时参数属性类型*/
 typedef char** const argv_attribute;
 

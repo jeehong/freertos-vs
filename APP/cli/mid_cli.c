@@ -16,11 +16,6 @@ typedef struct _list_command_t
 #define CLI_VERSION_MINOR		(1)		/* 次版本号 */
 
 
-/* Dimensions the buffer into which input characters are placed. */
-#define cmdMAX_INPUT_SIZE		256
-#define	cmdMAX_OUTPUT_SIZE		4096
-
-
 /* DEL acts as a backspace. */
 #define cmdASCII_DEL		( 0x7F )
 #define cmdASCII_BS			'\b'
@@ -269,7 +264,7 @@ static BaseType_t mid_cli_parse_command(const char * const input, char *dest, si
 	if((cmd != NULL) && (xReturn == pdFALSE))
 	{
 		/* 发现到有新的数据流，但是命令参数个数不匹配 */
-		sprintf(dest, "  '%s'%s", input, err_remind);
+		sprintf_s(dest, cmdMAX_OUTPUT_SIZE, "  '%s'%s", input, err_remind);
 		cmd = NULL;
 	}
 	else if(cmd != NULL)
@@ -288,7 +283,7 @@ static BaseType_t mid_cli_parse_command(const char * const input, char *dest, si
 	{
 		/* 命令为空，没有发现新的数据流输入 */
         if(*input != 0)
-            sprintf(dest, "  '%s'%s", input, err_remind);
+            sprintf_s(dest, cmdMAX_OUTPUT_SIZE, "  '%s'%s", input, err_remind);
 		else
 			memset(dest, cmdASCII_STRINGEND, sizeof(unsigned char) * cmdMAX_OUTPUT_SIZE);
 		xReturn = pdFALSE;
@@ -333,15 +328,15 @@ cmd_handle(help)
 	if(cmd == NULL)
 	{
 		cmd = &cmd_list_head;
-		sprintf(dest, "        COMMAND HELP             (VER:%d.%d)\r\n", CLI_VERSION_MAJOR, CLI_VERSION_MINOR);
+		sprintf_s(dest, cmdMAX_OUTPUT_SIZE, "        COMMAND HELP             (VER:%d.%d)\r\n", CLI_VERSION_MAJOR, CLI_VERSION_MINOR);
 	}
 	else
 	{
-		strcat(dest, "\t");
-		strcat(dest, cmd->module->command);
-		strcat(dest, "\t");
-        strcat(dest, cmd->module->help_info);
-		strcat(dest, pcNewLine);
+		strcat_s(dest, cmdMAX_OUTPUT_SIZE, "\t");
+		strcat_s(dest, cmdMAX_OUTPUT_SIZE, cmd->module->command);
+		strcat_s(dest, cmdMAX_OUTPUT_SIZE, "\t");
+        strcat_s(dest, cmdMAX_OUTPUT_SIZE, cmd->module->help_info);
+		strcat_s(dest, cmdMAX_OUTPUT_SIZE, pcNewLine);
 		cmd = cmd->next;
 	}
 

@@ -1,5 +1,6 @@
 #include "hal_cli.h"
-#include "stdio.h"
+#include <stdio.h>
+#include <conio.h>
 
 portBASE_TYPE hal_cli_data_tx(char *data, unsigned short len)
 {
@@ -12,7 +13,7 @@ portBASE_TYPE hal_cli_data_tx(char *data, unsigned short len)
 
 portBASE_TYPE hal_cli_data_rx(char *data, unsigned short len)
 {
-	*data = getch();
+	*data = _getch();
 
 	return 1;
 }

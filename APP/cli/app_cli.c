@@ -44,7 +44,7 @@ cmd_handle(info)
 
 	for(index = 0; dev_info[index] != NULL; index++)
 	{
-		strcat(dest, dev_info[index]);
+		strcat_s(dest, cmdMAX_OUTPUT_SIZE, dev_info[index]);
 	}
 
 	return pdFALSE;
@@ -53,22 +53,22 @@ cmd_handle(info)
 cmd_handle(date)
 {
 	time_t nowtime;
-	struct tm *timeinfo;
+	struct tm timeinfo;
 
 	(void) help_info;
 	(void) argv;
 	configASSERT(dest);
 
 	time( &nowtime );
-	timeinfo = localtime( &nowtime );
-	sprintf(dest, "    Current time: %d-%d-%d %d %02d:%02d:%02d\n", 
-		timeinfo->tm_year + 1900, 
-		timeinfo->tm_mon + 1, 
-		timeinfo->tm_mday, 
-		timeinfo->tm_wday, 
-		timeinfo->tm_hour, 
-		timeinfo->tm_min, 
-		timeinfo->tm_sec);
+	localtime_s(&timeinfo, &nowtime );
+	sprintf_s(dest, cmdMAX_OUTPUT_SIZE, "    Current time: %d-%d-%d %d %02d:%02d:%02d\n", 
+		timeinfo.tm_year + 1900, 
+		timeinfo.tm_mon + 1, 
+		timeinfo.tm_mday, 
+		timeinfo.tm_wday, 
+		timeinfo.tm_hour, 
+		timeinfo.tm_min, 
+		timeinfo.tm_sec);
 
 	return pdFALSE;
 }
@@ -84,7 +84,7 @@ cmd_handle(top)
 	static TaskStatus_t ptasks[MAX_TASKS];
 	TaskStatus_t *p;
 	unsigned int run_time;
-	unsigned char num_of_tasks = uxTaskGetNumberOfTasks();
+	unsigned long num_of_tasks = uxTaskGetNumberOfTasks();
 	char temp_str[30];
 	
 	(void) help_info;
@@ -99,29 +99,29 @@ cmd_handle(top)
 		if(num_of_tasks > MAX_TASKS)
 		{
 			num_of_tasks = MAX_TASKS;
-			sprintf(dest, "Warning: real num(%d) of tasks more than defines(%d)!\r\n", num_of_tasks, MAX_TASKS);
+			sprintf_s(dest, cmdMAX_OUTPUT_SIZE, "Warning: real num(%d) of tasks more than defines(%d)!\r\n", num_of_tasks, MAX_TASKS);
 		}
 		uxTaskGetSystemState(ptasks, num_of_tasks, NULL);
-		sprintf(dest, "        PRI     STATE   MEM(W)  %%TIME   NAME\r\n");
+		sprintf_s(dest, cmdMAX_OUTPUT_SIZE, "        PRI     STATE   MEM(W)  %%TIME   NAME\r\n");
 	}
 	p = &ptasks[curr_task];
-	sprintf(temp_str, "\t%d\t", p->uxCurrentPriority);
-	strcat(dest, temp_str);
+	sprintf_s(temp_str, 30, "\t%d\t", p->uxCurrentPriority);
+	strcat_s(dest, cmdMAX_OUTPUT_SIZE, temp_str);
 	switch(p->eCurrentState)
 	{
-		case eRunning: strcat(dest, "run"); break;
-		case eReady: strcat(dest, "ready"); break;
-		case eBlocked: strcat(dest, "block"); break;
-		case eSuspended: strcat(dest, "suspend"); break;
-		case eDeleted: strcat(dest, "deleted"); break;
-		case eInvalid: strcat(dest, "invalid"); break;
-		default: strcat(dest, "null"); break;
+		case eRunning: strcat_s(dest, cmdMAX_OUTPUT_SIZE, "run"); break;
+		case eReady: strcat_s(dest, cmdMAX_OUTPUT_SIZE, "ready"); break;
+		case eBlocked: strcat_s(dest, cmdMAX_OUTPUT_SIZE, "block"); break;
+		case eSuspended: strcat_s(dest, cmdMAX_OUTPUT_SIZE, "suspend"); break;
+		case eDeleted: strcat_s(dest, cmdMAX_OUTPUT_SIZE, "deleted"); break;
+		case eInvalid: strcat_s(dest, cmdMAX_OUTPUT_SIZE, "invalid"); break;
+		default: strcat_s(dest, cmdMAX_OUTPUT_SIZE, "null"); break;
 	}
 	run_time = p->ulRunTimeCounter / portGET_RUN_TIME_COUNTER_VALUE() * 1000;
-	sprintf(temp_str, "\t%d\t%c%d\t", p->usStackHighWaterMark, run_time < 10 ? '<' : ' ', run_time < 10 ? 1 : run_time / 10);
-	strcat(dest, temp_str);
-	strcat(dest, p->pcTaskName);
-	strcat(dest, "\r\n");
+	sprintf_s(temp_str, 30, "\t%d\t%c%d\t", p->usStackHighWaterMark, run_time < 10 ? '<' : ' ', run_time < 10 ? 1 : run_time / 10);
+	strcat_s(dest, cmdMAX_OUTPUT_SIZE, temp_str);
+	strcat_s(dest, cmdMAX_OUTPUT_SIZE, p->pcTaskName);
+	strcat_s(dest, cmdMAX_OUTPUT_SIZE, "\r\n");
 	curr_task ++;
 	if(curr_task == num_of_tasks)
 	{
