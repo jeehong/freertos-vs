@@ -51,7 +51,7 @@
       <WarningLevel>Level3</WarningLevel>
       <Optimization>Disabled</Optimization>
       <PreprocessorDefinitions>WIN32;_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>$(ProjectDir)FreeRTOS\portable\MSVC-MingW;$(ProjectDir)FreeRTOS\include;$(ProjectDir)APP\cli</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)FreeRTOS\portable\MSVC-MingW;$(ProjectDir)FreeRTOS\include;$(ProjectDir)lib\include;$(ProjectDir)APP\cli</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -79,6 +79,7 @@
     <ClCompile Include="APP\cli\app_cli.c" />
     <ClCompile Include="APP\cli\hal_cli.c" />
     <ClCompile Include="APP\cli\mid_cli.c" />
+    <ClCompile Include="APP\isotp_test.c" />
     <ClCompile Include="APP\main.c" />
     <ClCompile Include="APP\Run-time-stats-utils.c" />
     <ClCompile Include="FreeRTOS\croutine.c" />
@@ -90,6 +91,8 @@
     <ClCompile Include="FreeRTOS\stream_buffer.c" />
     <ClCompile Include="FreeRTOS\tasks.c" />
     <ClCompile Include="FreeRTOS\timers.c" />
+    <ClCompile Include="lib\isotp.c" />
+    <ClCompile Include="lib\timer.c" />
   </ItemGroup>
   <ItemGroup>
     <None Include="FreeRTOS\readme.txt" />

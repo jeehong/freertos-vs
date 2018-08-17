@@ -6,15 +6,47 @@
 #include "hal_cli.h"
 #include "mid_cli.h"
 
-typedef struct _list_command_t
-{
-	const struct _command_t *module;	/**< ab*/
-	struct _list_command_t *next;
-} list_command_t;
+/* os environment */
+#include "task.h"
 
 #define CLI_VERSION_MAJOR		(0)		/* 主版本号 */
-#define CLI_VERSION_MINOR		(1)		/* 次版本号 */
+#define CLI_VERSION_MINOR		(2)		/* 次版本号 */
 
+/** @breif 定义每个参数最大字符长度为29个+'\0'*/
+#define	cmdMAX_STRING_SIZE		30
+/** @breif 定义每个输入命令的字符串最大参数个数为7个，包含命令本身*/
+#define	cmdMAX_VARS_SIZE		7
+/** @breif dump命令一次最大打印数据总量，byte*/
+#define COLLECT_MAX_SIZE		128
+/** @breif dump命令 每行打印字节数*/
+#define ONE_LINE_MAX_BYTES		16
+
+/** @breif 当前权限状态*/
+enum passwd_state 
+{
+	PASSWD_INCORRECT = 0,
+	PASSWD_CORRECT = 1,
+};
+
+typedef struct _list_command_t
+{
+	const struct _command_t *module;	/**< 单个命令信息*/
+	struct _list_command_t *next;		/**< 链表下一个命令节点*/
+} list_command_t;
+
+typedef struct _mid_cli_t
+{
+	const char * prefix;							/**< 命令行返回前缀信息*/
+	struct _list_command_t list_head;				/**< 命令链表头*/
+	#ifdef CLI_SUPPORT_PASSWD
+	enum passwd_state permission;					/**< 权限*/
+	#endif
+	char output_string[cmdMAX_OUTPUT_SIZE];			/**< 输出缓冲区*/
+	char whole_command[cmdMAX_INPUT_SIZE];			/**< 输入缓冲区*/
+	char vars[cmdMAX_VARS_SIZE][cmdMAX_STRING_SIZE];/**< 命令参数字符串缓冲区*/
+	char *argv[cmdMAX_VARS_SIZE];					/**< 命令参数字符串指针*/
+	TaskHandle_t task_handle;						/**< 任务句柄*/
+} mid_cli_t;
 
 /* DEL acts as a backspace. */
 #define cmdASCII_DEL		( 0x7F )
@@ -25,107 +57,109 @@ typedef struct _list_command_t
 #define cmdASCII_SPACE		' '
 #define	cmdASCII_TILDE		'~'
 
-enum passwd_state {
-	PASSWD_INCORRECT = 0,
-	PASSWD_CORRECT = 1,
-};
+#define cli_malloc(wanted_size)		pvPortMalloc(wanted_size)
 
 static int8_t mid_cli_string_split(char **dest, const char *commandString);
 static void mid_cli_console_task(void *pvParameters);
 static BaseType_t mid_cli_parse_command(const char * const input, char *dest, size_t len);
+static void assist_print_task(void);
 
 #ifdef CLI_SUPPORT_PASSWD
 static const char * const passwd = "jhg";
-static const char * const input_passwd_msg = "Input password: ";
 static const char * const incorrect_passwd_msg = "Password incorrect!\r\n";
+static const char * const input_passwd_msg = "Input password: ";
 #endif
+static const char * const memory_allocate_error = ": Allocate memory faild!\r\n";
+static const char * const parame_overflow_error = ": error, parame overflow!\r\n";
 static const char * def_prefix = "Terminal ";
-static const char * prefix = NULL;
-static const char * const pcNewLine = "\r\n";
+static const char * const pc_new_line = "\r\n";
 static const char * const backspace = " \b";
-static const char * err_remind = " not be recognised. Input 'help' to check available commands.\r\n";
+static const char * error_remind = " not be recognised. Input 'help' to view available commands.\r\n";
+const char allocate_cli_error[] = "struct cli";
 
-build_var(help, "List all available commands.", 0);
-static struct _list_command_t cmd_list_head = 
-{
-	&help,
-	NULL,
-};
+build_var(help, "Lists all the registered commands.", 0);
 
-static char vars[cmdMAX_VARS_SIZE][cmdMAX_STRING_SIZE];
-static char *xargv[cmdMAX_VARS_SIZE];
-static char cOutputString[cmdMAX_OUTPUT_SIZE];
-static char cInputString[cmdMAX_INPUT_SIZE];
+static struct _mid_cli_t *cli = NULL;
 
 /*
  * 命令注册函数
  */
 BaseType_t mid_cli_register(const struct _command_t * const p)
 {
-    static struct _list_command_t *pxLastCommandInList = &cmd_list_head;
-    static struct _list_command_t *pxNewListItem;
-    BaseType_t xReturn = pdFAIL;
+    struct _list_command_t *last_cmd_in_list = &cli->list_head, *new_list_item;
+    BaseType_t ret = pdFAIL;
 
 	/* Check the parameter is not NULL. */
 	configASSERT(p);
 
+	if(p->expect_parame_num > cmdMAX_VARS_SIZE)
+	{
+		hal_cli_data_tx((signed char *)p->command, strlen(p->command));
+		hal_cli_data_tx((signed char *)parame_overflow_error, strlen(parame_overflow_error));
+		return ret;
+	}
+	while (last_cmd_in_list->next != NULL)
+	{
+		last_cmd_in_list = last_cmd_in_list->next;
+	}
 	/* 创建链表节点链接给新命令 */
-	pxNewListItem = (list_command_t *) cli_malloc(sizeof(list_command_t));
-	configASSERT(pxNewListItem);
+	new_list_item = (list_command_t *) cli_malloc(sizeof(list_command_t));
+	configASSERT(new_list_item);
 
-	if( pxNewListItem != NULL )
+	if(new_list_item != NULL)
 	{
 		taskENTER_CRITICAL();
-		{
-			/* 添加新的成员到链表 */
-			pxNewListItem->module = p;
-
-			/* 设置尾节点标志 */
-			pxNewListItem->next = NULL;
-
-			/* 链接新成员 */
-			pxLastCommandInList->next = pxNewListItem;
-
-			/* 记录当前节点，等待下一个节点被链接 */
-			pxLastCommandInList = pxNewListItem;
-		}
+		/* 添加新的成员到链表 */
+		new_list_item->module = p;
+		/* 设置尾节点标志 */
+		new_list_item->next = NULL;
+		/* 链接新成员 */
+		last_cmd_in_list->next = new_list_item;
+		/* 记录当前节点，等待下一个节点被链接 */
+		last_cmd_in_list = new_list_item;
 		taskEXIT_CRITICAL();
-
-		xReturn = pdPASS;
+		ret = pdPASS;
 	}
-
-	return xReturn;
+	else
+	{
+		hal_cli_data_tx((signed char *)p->command, strlen(p->command));
+		hal_cli_data_tx((signed char *)memory_allocate_error, strlen(memory_allocate_error));
+	}
+	
+	return ret;
 }
 
-void mid_cli_init(unsigned short usStackSize, UBaseType_t uxPriority, char *t, TaskHandle_t *h)
+int mid_cli_init(unsigned short usStackSize, UBaseType_t uxPriority, char *t)
 {
 	unsigned char i;
 
+	cli = (struct _mid_cli_t *)cli_malloc(sizeof(*cli));
+	if(cli == NULL)
+	{
+		hal_cli_data_tx((char *)allocate_cli_error, strlen(allocate_cli_error));
+		hal_cli_data_tx((char *)memory_allocate_error, strlen(memory_allocate_error));
+		return -1;
+	}
+	cli->list_head.module = &help;
+	cli->list_head.next = NULL;
+	#ifdef CLI_SUPPORT_PASSWD
+	cli->permission = PASSWD_INCORRECT;
+	#endif
 	for(i = 0; i < cmdMAX_VARS_SIZE; i ++)
 	{
-		xargv[i] = vars[i];
+		cli->argv[i] = &cli->vars[i][0];
 	}
-	if(t != NULL)
-		prefix = t;
-	else
-		prefix = def_prefix;
-	/* Create that task that handles the console itself. */
-	xTaskCreate(mid_cli_console_task,		/* The task that implements the command console. */
-				"commandLine",				/* Text name assigned to the task.  This is just to assist debugging.  The kernel does not use this name itself. */
-				usStackSize,				/* The size of the stack allocated to the task. */
-				NULL,						/* The parameter is not used, so NULL is passed. */
-				uxPriority,					/* The priority allocated to the task. */
-				h);							/* A handle is not required, so just pass NULL. */
+	cli->prefix = (t == NULL ? def_prefix : t);
+	xTaskCreate(mid_cli_console_task, "Command line", usStackSize, NULL, uxPriority, &cli->task_handle);
+	
+	return 0;
 }
 
 static void mid_cli_console_task(void *parame)
 {
-	#ifdef CLI_SUPPORT_PASSWD
-	enum passwd_state permission = PASSWD_INCORRECT;
-	#endif
-	unsigned int inputIndex = 0;
+	unsigned char input_index = 0;
 	unsigned char status = 0;
-	char inputChar;
+	signed char input_char;
 
 	for(;;)
 	{
@@ -133,188 +167,174 @@ static void mid_cli_console_task(void *parame)
 		if(status == 0)
 		{
 			/* 等待终端输入 */
-			while(hal_cli_data_rx(&inputChar, 0) != pdTRUE) ;
-			
+			while(hal_cli_data_rx(&input_char, 0) < 0)
+			{
+				vTaskDelay(5);
+			}
 			/* 输入数据回显 */
-			if(inputChar != cmdASCII_BS || inputIndex)
+			if(input_char != cmdASCII_BS || input_index)
 			{
 				#ifdef CLI_SUPPORT_PASSWD
-				if(permission != PASSWD_INCORRECT)
+				if(cli->permission != PASSWD_INCORRECT)
 				{
-					hal_cli_data_tx(&inputChar, sizeof(inputChar));
+					hal_cli_data_tx(&input_char, sizeof(input_char));
 				}
 				#else
-				hal_cli_data_tx(&inputChar, sizeof(inputChar));
+				hal_cli_data_tx(&input_char, sizeof(input_char));
 				#endif
 			}
-			
-			if(inputChar == cmdASCII_NEWLINE || inputChar == cmdASCII_HEADLINE)
+			/* 命令输入结束 */
+			if(input_char == cmdASCII_NEWLINE || input_char == cmdASCII_HEADLINE)
 			{
-				#ifdef CLI_SUPPORT_PASSWD
-				status = 1; /* 整包接收完毕，进入权限判定 */
-				#else
-				status = 3; /* 直接解析命令，无需权限判定 */
-				#endif
-				hal_cli_data_tx((char *)pcNewLine, strlen(pcNewLine));
+			#ifdef CLI_SUPPORT_PASSWD
+				/* 权限判定 */
+				if(cli->permission == PASSWD_INCORRECT)
+					status = 1;
+				else
+					status = 2;	/* 整包接收完毕，进入权限判定 */
+			#else
+				status = 2;	/* 直接解析命令，无需权限判定 */
+			#endif
+				hal_cli_data_tx((signed char *)pc_new_line, strlen(pc_new_line));
 			}
 			else			/* 组包阶段，且支持backspace回删功能 */
 			{
-				if(inputChar == cmdASCII_BS)
+				if(input_char == cmdASCII_BS && input_index > 0)
 				{
-					if(inputIndex > 0)
-					{
-						inputIndex --;
-						cInputString[ inputIndex ] = cmdASCII_STRINGEND;
-						hal_cli_data_tx((char *)backspace, strlen(backspace));
-					}
+					input_index --;
+					cli->whole_command[input_index] = cmdASCII_STRINGEND;
+					hal_cli_data_tx((signed char *)backspace, strlen(backspace));
 				}
-				else if((inputChar >= cmdASCII_SPACE) && (inputChar <= cmdASCII_TILDE))
+				else if((input_char >= cmdASCII_SPACE) 
+					&& (input_char <= cmdASCII_TILDE)
+					&& input_index < cmdMAX_INPUT_SIZE)
 				{
-					if( inputIndex < cmdMAX_INPUT_SIZE)
-					{
-						cInputString[inputIndex] = inputChar;
-						inputIndex ++;
-					}
+					cli->whole_command[input_index] = input_char;
+					input_index ++;
 				}
 			}
 		}
-		#ifdef CLI_SUPPORT_PASSWD
-		/* 组包完成，权限判定 */
-		if(status == 1)	
-		{
-			if(permission == PASSWD_INCORRECT)
-				status = 2;
-			else
-				status = 3;
-		}
 		/* 安全认证 */
-		if(status == 2)
+		if(status == 1)
 		{
-			if(strcmp(passwd, cInputString))
+			if(strcmp(passwd, cli->whole_command))
 			{
-				if(inputIndex)
+				if(input_index)
 				{
-					hal_cli_data_tx((char *)incorrect_passwd_msg, strlen(incorrect_passwd_msg));
+					hal_cli_data_tx((signed char *)incorrect_passwd_msg, strlen(incorrect_passwd_msg));
 				}
-				hal_cli_data_tx((char *)input_passwd_msg, strlen(input_passwd_msg));
+				hal_cli_data_tx((signed char *)input_passwd_msg, strlen(input_passwd_msg));
 				status = 0;
 			}
 			else
 			{
-				permission = PASSWD_CORRECT;
-				status = 3;
+				cli->permission = PASSWD_CORRECT;
+				status = 2;
 			}
-			memset(cInputString, 0, cmdMAX_INPUT_SIZE);
-			inputIndex = 0;
+			memset(cli->whole_command, 0, cmdMAX_INPUT_SIZE);
+			input_index = 0;
 		}
-		#endif
 		/* 命令解析 */
-		if(status == 3)
+		if(status == 2)
 		{
-			if(inputIndex != 0)
+			if(input_index != 0)
 			{
-				BaseType_t xReturned;
+				BaseType_t reted;
 				
 				do
 				{
-					memset(cOutputString, '\0', strlen(cOutputString));
-					xReturned = mid_cli_parse_command(cInputString, cOutputString, cmdMAX_OUTPUT_SIZE);
-					hal_cli_data_tx((char *)cOutputString, strlen(cOutputString));
-				} while(xReturned != pdFALSE);
-				memset(cInputString, 0, cmdMAX_INPUT_SIZE);
-				memset(vars, 0, sizeof(vars));
-				inputIndex = 0;
+					memset(cli->output_string, '\0', cmdMAX_OUTPUT_SIZE);
+					reted = mid_cli_parse_command(cli->whole_command, cli->output_string, cmdMAX_OUTPUT_SIZE);
+					hal_cli_data_tx((signed char *)cli->output_string, strlen(cli->output_string));
+				} while(reted != pdFALSE);
+				memset(cli->whole_command, 0, cmdMAX_INPUT_SIZE);
+				memset(cli->vars, 0, sizeof(cli->vars));
+				input_index = 0;
 			}
-			hal_cli_data_tx((char *)prefix, strlen(prefix));
+			hal_cli_data_tx((signed char *)cli->prefix, strlen(cli->prefix));
 			status = 0;
 		}
 	}
 }
 
+/* 默认分割符为 cmdASCII_SPACE 或结尾符 0 */
 static BaseType_t mid_cli_parse_command(const char * const input, char *dest, size_t len)
 {
-	static const struct _list_command_t *cmd = NULL;
-	BaseType_t xReturn = pdTRUE;
-	
-	const char *cmdString;
-	size_t cmdStringLen;
+	const struct _list_command_t *cmd = NULL;
+	BaseType_t ret = pdFALSE;
+	const char *cmd_string;
+	unsigned short cmd_string_len;
 
-	if(cmd == NULL)
+	for(cmd = &cli->list_head; cmd != NULL; cmd = cmd->next)
 	{
-		for(cmd = &cmd_list_head; cmd != NULL; cmd = cmd->next)
+		cmd_string = cmd->module->command;
+		cmd_string_len = strlen(cmd_string);
+		if(!strncmp(input, cmd_string, cmd_string_len))
 		{
-			cmdString = cmd->module->command;
-			cmdStringLen = strlen(cmdString);
-
-			if((input[cmdStringLen] == cmdASCII_SPACE) || (input[cmdStringLen] == 0))
+			/* 如果输入的命令参数不符合设定的个数，则认为命令无效 */
+			if(mid_cli_string_split(cli->argv, input) == cmd->module->expect_parame_num)
 			{
-				if(strncmp(input, cmdString, cmdStringLen) == 0)
-				{
-					/* 如果输入的命令参数不符合设定的个数，则认为命令无效 */
-					if(mid_cli_string_split(xargv, input) != cmd->module->expect_parame_num)
-					{
-						xReturn = pdFALSE;
-					}
-					break;
-				}
+				ret = pdTRUE;
 			}
+			break;
 		}
 	}
-    
-	if((cmd != NULL) && (xReturn == pdFALSE))
+	
+    /* 输入的数据流不符合设置要求 */
+	if(cmd != NULL && ret == pdTRUE)
 	{
-		/* 发现到有新的数据流，但是命令参数个数不匹配 */
-		sprintf_s(dest, cmdMAX_OUTPUT_SIZE, "  '%s'%s", input, err_remind);
-		cmd = NULL;
-	}
-	else if(cmd != NULL)
-	{
-		memset(dest, cmdASCII_STRINGEND, sizeof(unsigned char) * cmdMAX_OUTPUT_SIZE);
 		/* 执行注册命令的回调函数 */
-		xReturn = cmd->module->handle(dest, xargv, cmd->module->help_info);
-
-		/* 如果返回时 pdFALSE，表明命令函数返回信息已完毕，准备解析下一个命令 */
-		if(xReturn == pdFALSE)
-		{
-			cmd = NULL;
-		}
+		ret = cmd->module->handle(dest, cli->argv, cmd->module->help_info);
 	}
 	else
 	{
-		/* 命令为空，没有发现新的数据流输入 */
-        if(*input != 0)
-            sprintf_s(dest, cmdMAX_OUTPUT_SIZE, "  '%s'%s", input, err_remind);
-		else
-			memset(dest, cmdASCII_STRINGEND, sizeof(unsigned char) * cmdMAX_OUTPUT_SIZE);
-		xReturn = pdFALSE;
+		sprintf_s(dest, cmdMAX_OUTPUT_SIZE, "  '%s'%s", input, error_remind);
+		ret = pdFALSE;
 	}
 	
-	return xReturn;
+	return ret;
 }
 
-static int8_t mid_cli_string_split(char **dest, const char *commandString)
+/*
+ * @dest: 将切分好的数据放入对应的地址
+ * @cmd_string: 原始字符串来源
+ */
+static int8_t mid_cli_string_split(char **dest, const char *cmd_string)
 {
-	int8_t num = 0, index = 0;
-	BaseType_t wasSpace = pdFALSE;
+	int8_t segment = 0, index = 0;
+	BaseType_t was_space = pdFALSE;
 
-	while(*commandString != cmdASCII_STRINGEND)
+	while(*cmd_string != cmdASCII_STRINGEND)
 	{
-		if(*commandString == cmdASCII_SPACE
-			&& wasSpace == pdFALSE)
+		/* 遇到指令分隔符cmdASCII_SPACE */
+		if((*cmd_string) == cmdASCII_SPACE
+			&& was_space == pdFALSE)
 		{
-			dest[num][index] = cmdASCII_STRINGEND;
-			num++;
+			was_space = pdTRUE;
 			index = 0;
-			wasSpace = pdTRUE;
+			segment ++;
+			/* 当输入段数超过最大支持量，则主动退出解析 */
+			if(segment >= cmdMAX_VARS_SIZE)
+			{
+				break;
+			}
 		}
-		else
+		else if(index <= cmdMAX_STRING_SIZE - 1)
 		{
-			dest[num][index++] = *commandString;
-			wasSpace = pdFALSE;
+			/* 当截取本段字符串超过本段buffer最大空间cmdMAX_STRING_SIZE时，停止获取，并等待下一个段到来 */
+			if(index == cmdMAX_STRING_SIZE - 1)
+			{
+				dest[segment][index] = '\0';
+			}
+			else
+			{
+				dest[segment][index ++] = *cmd_string;
+			}
+			was_space = pdFALSE;
 		}
-		commandString++;
+		cmd_string ++;
 	}
-	return num;
+	return segment;
 }
 
 cmd_handle(help)
@@ -327,19 +347,20 @@ cmd_handle(help)
 
 	if(cmd == NULL)
 	{
-		cmd = &cmd_list_head;
-		sprintf_s(dest, cmdMAX_OUTPUT_SIZE, "        COMMAND HELP             (VER:%d.%d)\r\n", CLI_VERSION_MAJOR, CLI_VERSION_MINOR);
+		cmd = &cli->list_head;
+		sprintf_s(dest, cmdMAX_OUTPUT_SIZE, "        COMMAND HELP              [VER:%d.%d]\r\n", CLI_VERSION_MAJOR, CLI_VERSION_MINOR);
 	}
 	else
 	{
-		strcat_s(dest, cmdMAX_OUTPUT_SIZE, "\t");
-		strcat_s(dest, cmdMAX_OUTPUT_SIZE, cmd->module->command);
-		strcat_s(dest, cmdMAX_OUTPUT_SIZE, "\t");
-        strcat_s(dest, cmdMAX_OUTPUT_SIZE, cmd->module->help_info);
-		strcat_s(dest, cmdMAX_OUTPUT_SIZE, pcNewLine);
+	    strcat_s(dest, cmdMAX_OUTPUT_SIZE, "\t");
+	    strcat_s(dest, cmdMAX_OUTPUT_SIZE, cmd->module->command);
+	    strcat_s(dest, cmdMAX_OUTPUT_SIZE, "\t");
+	    strcat_s(dest, cmdMAX_OUTPUT_SIZE, cmd->module->help_info);
+		strcat_s(dest, cmdMAX_OUTPUT_SIZE, "\r\n");
 		cmd = cmd->next;
 	}
-
+	
+	vTaskDelay(10);			/* 需要等待串口发送，否则串口会溢出导致部分打印丢失 */
 	if(cmd == NULL)
 		return pdFALSE;		/* 所有信息发送完毕 */
 	else

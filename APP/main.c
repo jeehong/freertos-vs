@@ -129,21 +129,6 @@ choice.  See http://www.freertos.org/a00111.html for an explanation. */
 #define mainREGION_1_SIZE	7201
 #define mainREGION_2_SIZE	29905
 #define mainREGION_3_SIZE	6407
-/* The check task uses the sprintf function so requires a little more stack. */
-#define mainLED_TASK_STACK_SIZE			( configMINIMAL_STACK_SIZE + 50 )
-
-static void vPrintfTask( void *pvParameters )
-{
-	portTickType xLastWakeTime;
-	int counter = 0;
-
-	xLastWakeTime = xTaskGetTickCount();
-  	while(1)
-	{
-		printf("Hello,world![%d]\n", counter ++);
-		vTaskDelayUntil(&xLastWakeTime, 2000);
-	}
-}
 
 static void  prvInitialiseHeap( void )
 {
@@ -185,9 +170,8 @@ int main(void)
 	http://www.freertos.org/a00111.html for an explanation. */
 	prvInitialiseHeap();
 
-	app_cli_init(tskIDLE_PRIORITY + 1, "Terminal ", NULL);
+	app_cli_init(tskIDLE_PRIORITY + 1, NULL, NULL);
 
-	//xTaskCreate( vPrintfTask, "printf", mainLED_TASK_STACK_SIZE, NULL, 3, NULL );
 	/* Start the scheduler. */
 	vTaskStartScheduler();
 

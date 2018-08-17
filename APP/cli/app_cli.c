@@ -11,17 +11,40 @@
 #include "mid_cli.h" 
 #include "hal_cli.h" 
 
+/*
+ * 添加一个新命令需要三步操作:
+ * 1)创建一个命令结构体，设定相关信息
+ *		build_var(cmd, help_info, parame_num);
+ *			@cmd: 命令名称；
+ *			@help_info: 帮助信息，输入各参数所代表的含义；
+ *			@parame_num: 期望输入的参数个数，输入参数不匹配时，命令行无法识别；参数不包括命令本身；
+ * 2)创建一个函数，这个函数用于命令参数解析和功能执行；
+ *		static BaseType_t cmd##_handle( char *dest, argv_attribute argv, const char * const help_info);
+ *			字符串cmd必须与build_var中的cmd保持一致；
+ *			@dest: 需要返回信息时，向该地址写入字符串数据，如果需要多项数据返回，可参考info_handle函数结构；
+ *			@argv: 提供给命令执行函数各个参数信息
+ *				例如命令cp -r src dest，则argv[0] = "cp",argv[1] = "-r",argv[2] = "src",argv[3] = "dest"
+ *			@help_info: 提供命令在构建时的帮助信息所在地址；
+ * 3)将命令注册到命令行功能中:
+ *		mid_cli_register(&cmd);
+ *			@cmd: 构建命令时的命令名称；
+ *		将上面的函数放到app_cli_register( void )函数中调用；
+ */
 build_var(info, "Device information.", 0);
 build_var(date, "Display current time.", 0);
 #if ( configUSE_TRACE_FACILITY == 1 )
 build_var(top, "List all the tasks state.", 0);
 #endif
+build_var(isotp, "Test isotp function.Usage:isotp <datalen> <BS> <STmin>", 3);
+build_var(clear, "Clear Terminal.", 0);
 
 static void app_cli_register(void)
 {
 	mid_cli_register(&info);
 	mid_cli_register(&date);
 	mid_cli_register(&top);
+	mid_cli_register(&isotp);
+	mid_cli_register(&clear);
 }
 
 cmd_handle(info)
@@ -50,6 +73,15 @@ cmd_handle(info)
 	return pdFALSE;
 }
 
+cmd_handle(clear)
+{
+	( void ) help_info;
+	configASSERT(dest);
+	strcpy_s(dest, cmdMAX_OUTPUT_SIZE, "\033[H\033[J");
+
+	return pdFALSE;
+}
+
 cmd_handle(date)
 {
 	time_t nowtime;
@@ -69,6 +101,18 @@ cmd_handle(date)
 		timeinfo.tm_hour, 
 		timeinfo.tm_min, 
 		timeinfo.tm_sec);
+
+	return pdFALSE;
+}
+
+extern void isotp_test_main(unsigned short datalen, unsigned char bs, unsigned char stmin);
+cmd_handle(isotp)
+{
+	(void) help_info;
+	(void) argv;
+	configASSERT(dest);
+
+	isotp_test_main(atoi(argv[1]), atoi(argv[2]), atoi(argv[3]));
 
 	return pdFALSE;
 }
@@ -135,7 +179,7 @@ cmd_handle(top)
 
 void app_cli_init(unsigned char priority, char *t, TaskHandle_t *handle)
 {
-	mid_cli_init(400, priority, t, handle);
+	mid_cli_init(400, priority, t);
 
 	app_cli_register();
 }
