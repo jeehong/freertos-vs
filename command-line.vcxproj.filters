@@ -58,6 +58,15 @@
     <ClCompile Include="APP\Run-time-stats-utils.c">
       <Filter>Resource Files</Filter>
     </ClCompile>
+    <ClCompile Include="lib\isotp.c">
+      <Filter>Resource Files</Filter>
+    </ClCompile>
+    <ClCompile Include="APP\isotp_test.c">
+      <Filter>Resource Files</Filter>
+    </ClCompile>
+    <ClCompile Include="lib\timer.c">
+      <Filter>Resource Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <None Include="FreeRTOS\readme.txt">
