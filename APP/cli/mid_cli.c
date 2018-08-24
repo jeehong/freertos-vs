@@ -94,8 +94,8 @@ BaseType_t mid_cli_register(const struct _command_t * const p)
 
 	if(p->expect_parame_num > cmdMAX_VARS_SIZE)
 	{
-		hal_cli_data_tx((signed char *)p->command, strlen(p->command));
-		hal_cli_data_tx((signed char *)parame_overflow_error, strlen(parame_overflow_error));
+		hal_cli_data_tx(( char *)p->command, strlen(p->command));
+		hal_cli_data_tx(( char *)parame_overflow_error, strlen(parame_overflow_error));
 		return ret;
 	}
 	while (last_cmd_in_list->next != NULL)
@@ -122,8 +122,8 @@ BaseType_t mid_cli_register(const struct _command_t * const p)
 	}
 	else
 	{
-		hal_cli_data_tx((signed char *)p->command, strlen(p->command));
-		hal_cli_data_tx((signed char *)memory_allocate_error, strlen(memory_allocate_error));
+		hal_cli_data_tx(( char *)p->command, strlen(p->command));
+		hal_cli_data_tx(( char *)memory_allocate_error, strlen(memory_allocate_error));
 	}
 	
 	return ret;
@@ -159,7 +159,7 @@ static void mid_cli_console_task(void *parame)
 {
 	unsigned char input_index = 0;
 	unsigned char status = 0;
-	signed char input_char;
+	char input_char;
 
 	for(;;)
 	{
@@ -195,7 +195,7 @@ static void mid_cli_console_task(void *parame)
 			#else
 				status = 2;	/* 直接解析命令，无需权限判定 */
 			#endif
-				hal_cli_data_tx((signed char *)pc_new_line, strlen(pc_new_line));
+				hal_cli_data_tx(( char *)pc_new_line, strlen(pc_new_line));
 			}
 			else			/* 组包阶段，且支持backspace回删功能 */
 			{
@@ -203,7 +203,7 @@ static void mid_cli_console_task(void *parame)
 				{
 					input_index --;
 					cli->whole_command[input_index] = cmdASCII_STRINGEND;
-					hal_cli_data_tx((signed char *)backspace, strlen(backspace));
+					hal_cli_data_tx(( char *)backspace, strlen(backspace));
 				}
 				else if((input_char >= cmdASCII_SPACE) 
 					&& (input_char <= cmdASCII_TILDE)
@@ -221,9 +221,9 @@ static void mid_cli_console_task(void *parame)
 			{
 				if(input_index)
 				{
-					hal_cli_data_tx((signed char *)incorrect_passwd_msg, strlen(incorrect_passwd_msg));
+					hal_cli_data_tx(( char *)incorrect_passwd_msg, strlen(incorrect_passwd_msg));
 				}
-				hal_cli_data_tx((signed char *)input_passwd_msg, strlen(input_passwd_msg));
+				hal_cli_data_tx(( char *)input_passwd_msg, strlen(input_passwd_msg));
 				status = 0;
 			}
 			else
@@ -245,12 +245,12 @@ static void mid_cli_console_task(void *parame)
 				{
 					cli->output_string[0] = '\0';
 					reted = mid_cli_parse_command(cli->whole_command, cli->output_string, cmdMAX_OUTPUT_SIZE);
-					hal_cli_data_tx((signed char *)cli->output_string, strlen(cli->output_string));
+					hal_cli_data_tx(( char *)cli->output_string, strlen(cli->output_string));
 				} while(reted != pdFALSE);
 				memset(cli->whole_command, 0, strlen(cli->whole_command));
 				input_index = 0;
 			}
-			hal_cli_data_tx((signed char *)cli->prefix, strlen(cli->prefix));
+			hal_cli_data_tx(( char *)cli->prefix, strlen(cli->prefix));
 			status = 0;
 		}
 	}
