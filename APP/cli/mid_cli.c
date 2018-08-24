@@ -231,7 +231,7 @@ static void mid_cli_console_task(void *parame)
 				cli->permission = PASSWD_CORRECT;
 				status = 2;
 			}
-			memset(cli->whole_command, 0, cmdMAX_INPUT_SIZE);
+			memset(cli->whole_command, 0, strlen(cli->whole_command));
 			input_index = 0;
 		}
 		/* ÃüÁî½âÎö */
@@ -243,12 +243,11 @@ static void mid_cli_console_task(void *parame)
 				
 				do
 				{
-					memset(cli->output_string, '\0', cmdMAX_OUTPUT_SIZE);
+					cli->output_string[0] = '\0';
 					reted = mid_cli_parse_command(cli->whole_command, cli->output_string, cmdMAX_OUTPUT_SIZE);
 					hal_cli_data_tx((signed char *)cli->output_string, strlen(cli->output_string));
 				} while(reted != pdFALSE);
-				memset(cli->whole_command, 0, cmdMAX_INPUT_SIZE);
-				memset(cli->vars, 0, sizeof(cli->vars));
+				memset(cli->whole_command, 0, strlen(cli->whole_command));
 				input_index = 0;
 			}
 			hal_cli_data_tx((signed char *)cli->prefix, strlen(cli->prefix));

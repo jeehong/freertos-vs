@@ -14,6 +14,6 @@ portBASE_TYPE hal_cli_data_tx(char *data, unsigned short len)
 portBASE_TYPE hal_cli_data_rx(char *data, unsigned short len)
 {
 	*data = _getch();
-
+	fflush(stdin);
 	return 1;
 }
