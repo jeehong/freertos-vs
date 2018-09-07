@@ -2,6 +2,7 @@
 #include <string.h>
 #include <stdio.h>
 #include <time.h>
+#include <windows.h>
 
 #include "FreeRTOS.h"
 #include "task.h"
@@ -49,25 +50,45 @@ static void app_cli_register(void)
 
 cmd_handle(info)
 {
-	unsigned char index;
-	
-	const static char *dev_info[] =
-	{
-		" 	Dev:	Intel(R) Core(TM)\r\n",
-		" 	Cpu:	i5-7200U CPU\r\n",
-		" 	Freq: 	2.50GHz 2.71GHz\r\n",
-		" 	Mem:	256GB SSD\r\n",
-		" 	Ram:	16.0GB(in total) 15.9GB(available)\r\n",
-		NULL
-	};
+	SYSTEM_INFO  sysInfo;
+	OSVERSIONINFOEX osvi;
+	char buffer[50];
 
 	(void) help_info;
 	(void) argv;
 	configASSERT(dest);
-
-	for(index = 0; dev_info[index] != NULL; index++)
+	GetSystemInfo(&sysInfo);
+	sprintf_s(buffer, 50, "    OemId : %u\n", sysInfo.dwOemId);
+	strcat_s(dest, 50, buffer);
+	sprintf_s(buffer, 50, "    处理器架构 : %u\n", sysInfo.wProcessorArchitecture);
+	strcat_s(dest, cmdMAX_OUTPUT_SIZE - strlen(dest), buffer);
+	sprintf_s(buffer, 50, "    页面大小 : %u\n", sysInfo.dwPageSize);
+	strcat_s(dest, cmdMAX_OUTPUT_SIZE - strlen(dest), buffer);
+	sprintf_s(buffer, 50, "    应用程序最小地址 : 0x%X\n", sysInfo.lpMinimumApplicationAddress);
+	strcat_s(dest, cmdMAX_OUTPUT_SIZE - strlen(dest), buffer);
+	sprintf_s(buffer, 50, "    应用程序最大地址 : 0x%X\n", sysInfo.lpMaximumApplicationAddress);
+	strcat_s(dest, cmdMAX_OUTPUT_SIZE - strlen(dest), buffer);
+	sprintf_s(buffer, 50, "    处理器掩码 : 0x%X\n", sysInfo.dwActiveProcessorMask);
+	strcat_s(dest, cmdMAX_OUTPUT_SIZE - strlen(dest), buffer);
+	sprintf_s(buffer, 50, "    处理器数量 : %u\n", sysInfo.dwNumberOfProcessors);
+	strcat_s(dest, cmdMAX_OUTPUT_SIZE - strlen(dest), buffer);
+	sprintf_s(buffer, 50, "    处理器类型 : %u\n", sysInfo.dwProcessorType);
+	strcat_s(dest, cmdMAX_OUTPUT_SIZE - strlen(dest), buffer);
+	sprintf_s(buffer, 50, "    虚拟内存分配粒度 : 0x%X\n", sysInfo.dwAllocationGranularity);
+	strcat_s(dest, cmdMAX_OUTPUT_SIZE - strlen(dest), buffer);
+	sprintf_s(buffer, 50, "    处理器级别 : %u\n", sysInfo.wProcessorLevel);
+	strcat_s(dest, cmdMAX_OUTPUT_SIZE - strlen(dest), buffer);
+	sprintf_s(buffer, 50, "    处理器版本 : %u\n", sysInfo.wProcessorRevision);
+	strcat_s(dest, cmdMAX_OUTPUT_SIZE - strlen(dest), buffer);
+	osvi.dwOSVersionInfoSize=sizeof(osvi);
+	if (GetVersionEx((LPOSVERSIONINFOW)&osvi))
 	{
-		strcat_s(dest, cmdMAX_OUTPUT_SIZE, dev_info[index]);
+		sprintf_s(buffer, 50, "    Version     : %u.%u\n", osvi.dwMajorVersion, osvi.dwMinorVersion);
+		strcat_s(dest, cmdMAX_OUTPUT_SIZE - strlen(dest), buffer);
+		sprintf_s(buffer, 50, "    Build       : %u\n", osvi.dwBuildNumber);
+		strcat_s(dest, cmdMAX_OUTPUT_SIZE - strlen(dest), buffer);
+		sprintf_s(buffer, 50, "    Service Pack: %u.%u\n", osvi.wServicePackMajor, osvi.wServicePackMinor);
+		strcat_s(dest, cmdMAX_OUTPUT_SIZE - strlen(dest), buffer);
 	}
 
 	return pdFALSE;
@@ -117,7 +138,6 @@ cmd_handle(isotp)
 	return pdFALSE;
 }
 
-//static BaseType_t top_main( char *dest, argv_attribute argv, const char * const help_info)
 #if (configGENERATE_RUN_TIME_STATS == 1)
 cmd_handle(top)
 {
@@ -161,8 +181,9 @@ cmd_handle(top)
 		case eInvalid: strcat_s(dest, cmdMAX_OUTPUT_SIZE, "invalid"); break;
 		default: strcat_s(dest, cmdMAX_OUTPUT_SIZE, "null"); break;
 	}
-	run_time = p->ulRunTimeCounter / portGET_RUN_TIME_COUNTER_VALUE() * 1000;
-	sprintf_s(temp_str, 30, "\t%d\t%c%d\t", p->usStackHighWaterMark, run_time < 10 ? '<' : ' ', run_time < 10 ? 1 : run_time / 10);
+	run_time = p->ulRunTimeCounter * 1000 / portGET_RUN_TIME_COUNTER_VALUE();
+	/* sprintf_s(temp_str, 30, "\t%d\t%c%d\t", p->usStackHighWaterMark, run_time < 10 ? '<' : ' ', run_time < 10 ? 1 : run_time / 10); */
+	sprintf_s(temp_str, 30, "\t%d\t=X\t", p->usStackHighWaterMark);
 	strcat_s(dest, cmdMAX_OUTPUT_SIZE, temp_str);
 	strcat_s(dest, cmdMAX_OUTPUT_SIZE, p->pcTaskName);
 	strcat_s(dest, cmdMAX_OUTPUT_SIZE, "\r\n");

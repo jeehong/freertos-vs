@@ -155,11 +155,14 @@ int mid_cli_init(unsigned short usStackSize, UBaseType_t uxPriority, char *t)
 	return 0;
 }
 
-static void mid_cli_console_task(void *parame)
+static portTASK_FUNCTION( mid_cli_console_task, pvParameters )
 {
 	unsigned char input_index = 0;
 	unsigned char status = 0;
 	char input_char;
+
+	/* Stop warnings. */
+	( void ) pvParameters;
 
 	for(;;)
 	{

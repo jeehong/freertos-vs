@@ -110,7 +110,7 @@ BaseType_t mid_cli_register(const struct _command_t *const p);
 *
 * @param uxPriority 命令行功能任务优先级，建议:与空闲任务优先级相同
 *
-* @param prjPrefix 命令返回前缀，一般设置为项目代号+版本号: "Whale-1.0.0 "，如果设置为NULL，则默认前缀为Terminal
+* @param prjPrefix 命令返回前缀，一般设置为项目代号+版本号: "cmd-1.0.0 "，如果设置为NULL，则默认前缀为Terminal
 *
 * @return 
 * 返回值|描述

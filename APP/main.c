@@ -171,7 +171,6 @@ int main(void)
 	prvInitialiseHeap();
 
 	app_cli_init(tskIDLE_PRIORITY + 1, NULL, NULL);
-
 	/* Start the scheduler. */
 	vTaskStartScheduler();
 
