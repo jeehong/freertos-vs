@@ -312,6 +312,8 @@ static int8_t mid_cli_string_split(char **dest, const char *cmd_string)
 		if((*cmd_string) == cmdASCII_SPACE
 			&& was_space == pdFALSE)
 		{
+			/* Add EOS(end of string) for string of previous parameter */
+			dest[segment][index] = '\0';
 			was_space = pdTRUE;
 			index = 0;
 			segment ++;

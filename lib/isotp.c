@@ -50,6 +50,12 @@ enum n_pci_type_e
  */
 #define FC_DEFAULT_BS	1UL
 
+/*
+ * The unused data bytes of can frame shall be padded with this value,
+ * the unused data bytes will not padded any value if undefine this macro.
+ */
+#define UNUSED_PADDING_VALUE	0xFF
+
 /* Timeout values */
 #define TIMEOUT_SESSION		(500UL) /* Timeout between successfull send and isotp_receive */
 #define TIMEOUT_FC			(250UL) /* Timeout between FF and FC or Block CF and FC */
@@ -69,6 +75,19 @@ static void fc_delay(uint8_t STmin);
 static ERROR_CODE send_port(struct isotp_msg_t *msg);
 static ERROR_CODE receive_port(struct isotp_msg_t *msg);
 
+/*
+ * initialize a message in tp layer
+ * 
+ * @parameter in:
+ * msg:       object
+ * sa:        source address
+ * ta:        target address
+ * fs_set_cb: flow control status control callback
+ * send:      send data function in data link layer
+ * receive:   receive data function in data link layer
+ * @parameter out:
+ * operation status return
+ */
 ERROR_CODE isotp_init(struct isotp_t *msg,
 							uint32_t sa,
 							uint32_t ta,
@@ -192,7 +211,9 @@ static ERROR_CODE send_fc(struct isotp_t *msg)
 	{
 		xtimer_delete(&msg->N_Cr);
 	}
-	memset(data, 0UL, 8UL);
+#ifdef UNUSED_PADDING_VALUE
+	memset(data, UNUSED_PADDING_VALUE, 8UL);
+#endif
 	/* FC message high nibble = 0x3 , low nibble = FC Status */
 	data[0] = (N_PCI_FC | msg->FS);
 	data[1] = msg->BS;
@@ -207,11 +228,17 @@ static ERROR_CODE send_fc(struct isotp_t *msg)
 	return send_port(&msg->isotp);
 }
 
-static ERROR_CODE send_sf(struct isotp_t *msg) //Send SF Message
+/*
+ * Send SF Message
+ */
+static ERROR_CODE send_sf(struct isotp_t *msg)
 {
 	uint8_t *data = msg->isotp.phy_tx.data;
 
-	memset(data, 0UL, 8UL);
+#ifdef UNUSED_PADDING_VALUE
+	memset(data, UNUSED_PADDING_VALUE, 8UL);
+#endif
+
 	/* SF message high nibble = 0x0 , low nibble = Length */
 	data[0] = (N_PCI_SF | msg->DL);
 	memcpy(data + 1UL, msg->Buffer + msg->buffer_index, msg->DL);
@@ -226,14 +253,15 @@ static ERROR_CODE send_ff(struct isotp_t *msg)
 {
 	uint8_t *data = msg->isotp.phy_tx.data;
 
-	memset(data, 0UL, 8UL);
+#ifdef UNUSED_PADDING_VALUE
+	memset(data, UNUSED_PADDING_VALUE, 8UL);
+#endif
 	msg->buffer_index = 0UL;
 	msg->SN = ISOTP_DEFAULT_SN;
 	data[0] = N_PCI_FF | ((msg->DL >> 8UL) & 0x0F);
 	data[1] = (msg->DL & 0xFF);
 	/* Skip 2 Bytes PCI */
 	memcpy(data + 2UL, msg->Buffer + msg->buffer_index, 6UL);
-	
 	/* First Frame has full length */
 	return send_port(&msg->isotp);
 }
@@ -246,7 +274,9 @@ static ERROR_CODE send_cf(struct isotp_t *msg)
 	uint8_t *data = msg->isotp.phy_tx.data;
 	uint16_t len = 7UL;
 
-	memset(data, 0UL, 8UL);
+#ifdef UNUSED_PADDING_VALUE
+	memset(data, UNUSED_PADDING_VALUE, 8UL);
+#endif
 	data[0] = (N_PCI_CF | (msg->SN & 0x0F));
 	if(msg->DL > 7UL) 
 	{
@@ -527,7 +557,7 @@ enum N_Result isotp_send(struct isotp_t* msg)
 							}
 						}
 						msg->SN ++;
-						if(msg->DL > 7L)
+						if(msg->DL > 7UL)
 						{
 							msg->buffer_index += 7UL;
 							msg->DL -= 7UL;

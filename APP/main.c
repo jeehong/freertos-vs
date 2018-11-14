@@ -178,7 +178,3 @@ int main(void)
 	idle task. */
 	return 0;
 }
-
-
-
-
