@@ -37,6 +37,7 @@ enum n_pci_type_e
  * Frame N_PDU
  */
 #define N_CR_TIMEOUT	1000UL
+
 /*
  * 0x00 BlockSize (BS)
  * The BS parameter value 0 shall be used to indicate to the sender that no more FC frames shall be sent
@@ -294,23 +295,23 @@ static ERROR_CODE send_cf(struct isotp_t *msg)
 
 static void fc_delay(uint8_t STmin)
 {
-	/* SeparationTime minimum (STmin) range: 0 ms ¡§C 127 ms */
+	/* SeparationTime minimum (STmin) range: 0ms~127ms */
 	if(STmin <= 0x7F)
 	{
 		delay_1ms(STmin);
 	}
 	else if(STmin <= 0xF0)
 	{
-		/* This range of values is reserved by this part of ISO 15765 */
+		delay_1ms(ISOTP_DEFAULT_STmin);
 	}
 	else if(STmin <= 0xF9)
 	{
-		/* SeparationTime minimum (STmin) range: 100 |¨¬s ¡§C 900 |¨¬s */
+		/* SeparationTime minimum (STmin) range: 100us~900us */
 		delay_100us(STmin - 0xF0);
 	}
 	else
 	{
-		/* This range of values is reserved by this part of ISO 15765. */
+		delay_1ms(ISOTP_DEFAULT_STmin);
 	}
 }
 
@@ -359,10 +360,6 @@ static ERROR_CODE rcv_ff(struct isotp_t* msg)
 		msg->rest -= 6UL; /* Rest length */
 		msg->BS_Counter = msg->BS;
 		msg->tp_state = ISOTP_WAIT_DATA;
-		/* continue to send */
-		/* msg->FS = ISOTP_FS_CTS; */
-		/* SeparationTime minimum (STmin) range: 0 ms ¨C 127 ms */
-		/* msg->STmin = 10UL; */
 		err = send_fc(msg);
 	}
 
@@ -429,8 +426,6 @@ static ERROR_CODE rcv_cf(struct isotp_t* msg)
 		}
 		msg->buffer_index += 7UL;
 		msg->SN ++;
-		
-
 		break;
 	}
 	
@@ -500,82 +495,90 @@ enum N_Result isotp_send(struct isotp_t* msg)
 {
 	ERROR_CODE err = STATUS_NORMAL;
 
-	send_init(msg);
-	msg->tp_state = ISOTP_SEND;
-	while(msg->tp_state != ISOTP_IDLE && msg->tp_state != ISOTP_ERROR)
+	
+	if(msg->tp_state != ISOTP_IDLE)
 	{
-		switch(msg->tp_state)
+		err = N_ERROR;
+	}
+	else
+	{
+		msg->tp_state = ISOTP_SEND;
+		send_init(msg);
+		while(msg->tp_state != ISOTP_IDLE && msg->tp_state != ISOTP_ERROR)
 		{
-			case ISOTP_IDLE:
-				break;
-			case ISOTP_SEND:
-				if(msg->DL <= 7UL)
-				{
-					err = send_sf(msg);
-					msg->tp_state = ISOTP_IDLE;
-				}
-				else
-				{
-					err = send_ff(msg);
-					if(err == STATUS_NORMAL) // FF complete
+			switch(msg->tp_state)
+			{
+				case ISOTP_IDLE:
+					break;
+				case ISOTP_SEND:
+					if(msg->DL <= 7UL)
 					{
-						timer_add(&msg->N_Bs);
-						msg->buffer_index += 6UL;
-						msg->DL -= 6UL;
-						msg->tp_state = ISOTP_WAIT_FIRST_FC;
+						err = send_sf(msg);
+						msg->tp_state = ISOTP_IDLE;
 					}
-				}
-				break;
-			case ISOTP_WAIT_FIRST_FC:
-				if(timer_overflow(&msg->N_Bs, TIMEOUT_FC))
-				{
-					msg->tp_state = ISOTP_IDLE;
-					err = ERR_TIMEOUT;
-					xtimer_delete(&msg->N_Bs);
-				}
-				/* break; */
-			case ISOTP_WAIT_FC:
-				if(receive_port(&msg->isotp) == STATUS_NORMAL)
-				{
-					err = rcv_fc(msg);
-				}
-				break;
-			case ISOTP_SEND_CF:
-				while(msg->tp_state == ISOTP_SEND_CF)
-				{
-					fc_delay(msg->STmin);
-					err = send_cf(msg);
-					if(err == STATUS_NORMAL)
+					else
 					{
-						if(msg->BS > 0UL)
+						err = send_ff(msg);
+						if(err == STATUS_NORMAL) // FF complete
 						{
-							if((--msg->BS_Counter) == 0UL)
+							timer_add(&msg->N_Bs);
+							msg->buffer_index += 6UL;
+							msg->DL -= 6UL;
+							msg->tp_state = ISOTP_WAIT_FIRST_FC;
+						}
+					}
+					break;
+				case ISOTP_WAIT_FIRST_FC:
+					if(timer_overflow(&msg->N_Bs, TIMEOUT_FC))
+					{
+						msg->tp_state = ISOTP_IDLE;
+						err = ERR_TIMEOUT;
+						xtimer_delete(&msg->N_Bs);
+					}
+					/* break; */
+				case ISOTP_WAIT_FC:
+					if(receive_port(&msg->isotp) == STATUS_NORMAL)
+					{
+						err = rcv_fc(msg);
+					}
+					break;
+				case ISOTP_SEND_CF:
+					while(msg->tp_state == ISOTP_SEND_CF)
+					{
+						fc_delay(msg->STmin);
+						err = send_cf(msg);
+						if(err == STATUS_NORMAL)
+						{
+							if(msg->BS > 0UL)
 							{
-								timer_add(&msg->N_Bs);
-								msg->BS_Counter = msg->BS;
-								msg->tp_state = ISOTP_WAIT_FC;
+								if((--msg->BS_Counter) == 0UL)
+								{
+									timer_add(&msg->N_Bs);
+									msg->BS_Counter = msg->BS;
+									msg->tp_state = ISOTP_WAIT_FC;
+								}
+							}
+							msg->SN ++;
+							if(msg->DL > 7UL)
+							{
+								msg->buffer_index += 7UL;
+								msg->DL -= 7UL;
+							}
+							else
+							{
+								msg->buffer_index += msg->DL;
+								msg->DL = 0UL;
+								msg->tp_state = ISOTP_IDLE;
 							}
 						}
-						msg->SN ++;
-						if(msg->DL > 7UL)
-						{
-							msg->buffer_index += 7UL;
-							msg->DL -= 7UL;
-						}
-						else
-						{
-							msg->buffer_index += msg->DL;
-							msg->tp_state = ISOTP_IDLE;
-						}
 					}
-				}
-				break;
-			default:
-				err = ERR_PARAMETER;
-				break;
+					break;
+				default:
+					err = ERR_PARAMETER;
+					break;
+			}
 		}
 	}
-
 	return msg->reply;
 }
 
